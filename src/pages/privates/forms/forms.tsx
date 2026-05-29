@@ -1,25 +1,143 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, CSSProperties } from "react";
 import type { CustomDocument } from "@/types/document";
-import { fetchDocumentos } from "./forms.action";
+import { loadDocuments, uploadDocumentAction } from "./forms.action";
 import { customStyle } from "@/styles/custom-style";
 import { colors } from "@/styles/colors";
 
 export function FormsPage() {
     const [busca, setBusca] = useState("");
-    const [documentos, setDocumentos] = useState<CustomDocument[]>([]);
+    const [documentos, setDocuments] = useState<CustomDocument[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [category, setCategory] = useState("");
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    
+    async function handleFetchDocuments() {
+        setLoading(true);
+        setError(null);
+
+        try {
+            setDocuments(await loadDocuments());
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Erro ao carregar documentos");
+        } finally {
+            setLoading(false);
+        }
+    }
 
     useEffect(() => {
-        fetchDocumentos(setDocumentos);
+        void handleFetchDocuments();
     }, []);
 
     const documentosFiltrados = useMemo(() => {
-        return documentos.filter(doc =>
-            doc.nome.toLowerCase().includes(busca.toLowerCase())
-        );
+        const termo = busca.trim().toLowerCase();
+
+        if (!termo) {
+            return documentos;
+        }
+
+        return documentos.filter((doc) => {
+            return doc.nome.toLowerCase().includes(termo) || doc.arquivo.toLowerCase().includes(termo);
+        });
     }, [busca, documentos]);
+
+    async function handleUpload() {
+        if (!selectedFile) {
+            setError("Selecione um arquivo para enviar");
+            return;
+        }
+
+        setUploading(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            await uploadDocumentAction({
+                file: selectedFile,
+                category,
+            });
+
+            setSuccess("Documento enviado e metadata salva com sucesso");
+            setSelectedFile(null);
+            setCategory("");
+            await handleFetchDocuments();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Erro ao enviar documento");
+        } finally {
+            setUploading(false);
+        }
+    }
+
+    function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0] ?? null;
+        setSelectedFile(file);
+        setError(null);
+        setSuccess(null);
+    }
 
     return (
         <div style={styles.page}>
+
+            <div style={styles.panel}>
+                <div style={styles.panelHeader}>
+                    <div>
+                        <h2 style={styles.title}>Enviar documento</h2>
+                        <p style={styles.subtitle}>Gere a URL pré-assinada, envie direto ao S3 e salve a metadata no backend.</p>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => void handleFetchDocuments()}
+                        style={{ ...styles.secondaryButton, opacity: loading ? 0.7 : 1 }}
+                        disabled={loading}
+                    >
+                        {loading ? "Atualizando..." : "Atualizar lista"}
+                    </button>
+                </div>
+
+                <div style={styles.formRow}>
+                    <label style={styles.field}>
+                        <span style={styles.label}>Arquivo</span>
+                        <input
+                            type="file"
+                            onChange={handleFileChange}
+                            style={styles.fileInput}
+                        />
+                    </label>
+
+                    <label style={styles.field}>
+                        <span style={styles.label}>Categoria</span>
+                        <input
+                            type="text"
+                            placeholder="Opcional"
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            style={customStyle.input}
+                        />
+                    </label>
+
+                    <button
+                        type="button"
+                        onClick={() => void handleUpload()}
+                        style={{ ...styles.primaryButton, opacity: uploading ? 0.7 : 1 }}
+                        disabled={uploading}
+                    >
+                        {uploading ? "Enviando..." : "Enviar documento"}
+                    </button>
+                </div>
+
+                {selectedFile && (
+                    <div style={styles.fileSummary}>
+                        Selecionado: {selectedFile.name} ({Math.ceil(selectedFile.size / 1024)} KB)
+                    </div>
+                )}
+
+                {error && <div style={customStyle.error}>{error}</div>}
+                {success && <div style={styles.success}>{success}</div>}
+            </div>
 
             <input
                 type="text"
@@ -70,11 +188,105 @@ export function FormsPage() {
     );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
     page: {
         padding: 30,
         maxWidth: 1000,
         margin: "0 auto",
+    },
+
+    panel: {
+        marginBottom: 24,
+        padding: 20,
+        background: colors.cardBG,
+        borderRadius: 14,
+        border: `1px solid ${colors.border}`,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+    },
+
+    panelHeader: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 16,
+        marginBottom: 16,
+        flexWrap: "wrap",
+    },
+
+    title: {
+        margin: 0,
+        color: colors.text,
+        fontSize: 20,
+        fontWeight: 700,
+    },
+
+    subtitle: {
+        margin: "6px 0 0",
+        color: colors.textLight,
+        fontSize: 14,
+    },
+
+    formRow: {
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        gap: 14,
+        alignItems: "end",
+    },
+
+    field: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+    },
+
+    label: {
+        fontSize: 14,
+        fontWeight: 600,
+        color: colors.text,
+    },
+
+    fileInput: {
+        ...customStyle.input,
+        padding: 9,
+    },
+
+    primaryButton: {
+        padding: "12px 18px",
+        borderRadius: 10,
+        border: "none",
+        background: colors.primaryDark,
+        color: colors.textButton,
+        fontWeight: 700,
+        cursor: "pointer",
+        height: 42,
+    },
+
+    secondaryButton: {
+        padding: "10px 14px",
+        borderRadius: 10,
+        border: `1px solid ${colors.border}`,
+        background: colors.inputBG,
+        color: colors.text,
+        fontWeight: 600,
+        cursor: "pointer",
+    },
+
+    fileSummary: {
+        marginTop: 14,
+        fontSize: 14,
+        color: colors.textLight,
+    },
+
+    success: {
+        marginTop: 14,
+        padding: 10,
+        borderRadius: 8,
+        background: "#E9F9EF",
+        color: "#126B3A",
+        fontSize: 14,
+        textAlign: "center",
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
     },
 
     card: {
