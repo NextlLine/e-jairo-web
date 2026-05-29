@@ -1,5 +1,6 @@
 import { auth } from "@/services/auth";
 import type { Advertisement } from "@/types/advertisement";
+import { baseURL } from "@/types/baseURL";
 import { z } from "zod";
 
 const createAdvertisementSchema = z.object({
@@ -13,10 +14,7 @@ export const createAddAdvertisementAction = async (message: string): Promise<Adv
         throw new Error(parsed.error.issues[0].message);
     }
 
-    const baseUrl = import.meta.env.VITE_BASE_URL;
-    if (!baseUrl) throw new Error("URL da API não configurada");
-
-    const response = await fetch(`${baseUrl}/advertisement/create`, {
+    const response = await fetch(`${baseURL.getBaseURL()}/advertisements`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -39,10 +37,7 @@ export const createAddAdvertisementAction = async (message: string): Promise<Adv
 
 
 export const loadAdvertisementsAction = async (): Promise<Advertisement[]> => {
-    const baseUrl = import.meta.env.VITE_BASE_URL;
-    if (!baseUrl) throw new Error("URL da API não configurada");
-
-    const response = await fetch(`${baseUrl}/advertisement/get`, {
+    const response = await fetch(`${baseURL.getBaseURL()}/advertisements`, {
         method: "GET",
         headers: {
             "Authorization": `Bearer ${auth.getToken()}`,
@@ -63,13 +58,9 @@ export const loadAdvertisementsAction = async (): Promise<Advertisement[]> => {
 
 export const deleteAdvertisementAction = async (id: string) => {
     try {
-        const baseUrl = import.meta.env.VITE_BASE_URL;
 
-        if (!baseUrl) {
-            throw new Error("URL da API não configurada");
-        }
 
-        const response = await fetch(`${baseUrl}/advertisement/delete/${id}`, {
+        const response = await fetch(`${baseURL.getBaseURL()}/advertisements/${id}`, {
             method: "DELETE",
             headers: {
                 "Content-Type": "application/json",

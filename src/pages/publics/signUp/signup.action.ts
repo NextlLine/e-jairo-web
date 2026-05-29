@@ -1,12 +1,15 @@
+import { router } from "@/router";
+import { baseURL } from "@/types/baseURL";
 
 export const signUpAction = async (
     email: string,
     password: string,
     confirmPassword: string,
     name: string,
-    teamId: string,
+    teamCode: string,
+    profession: string
 ) => {
-    if (!email || !password || !confirmPassword || !name || !teamId) {
+    if (!email || !password || !confirmPassword || !name || !teamCode || !profession) {
         throw new Error("Preencha todos os campos");
     }
 
@@ -20,9 +23,7 @@ export const signUpAction = async (
         );
     }
 
-    const baseUrl = import.meta.env.VITE_BASE_URL;
-
-    const response = await fetch(`${baseUrl}/auth/signup`, {
+    const response = await fetch(`${baseURL.getBaseURL()}/auth/signup`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -31,7 +32,8 @@ export const signUpAction = async (
             email,
             password,
             name,
-            teamId,
+            teamCode: teamCode,
+            profession,
         }),
     });
 
@@ -48,7 +50,8 @@ export const signUpAction = async (
             errorMessage = await response.text();
         }
 
-
         throw new Error(errorMessage);
     }
+
+    router.navigate("/confirm-code", { state: { email } });
 };
