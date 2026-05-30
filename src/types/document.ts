@@ -1,4 +1,5 @@
 export type CustomDocument = {
+  id: string;
   nome: string;
   arquivo: string;
 };
@@ -12,6 +13,17 @@ export type GenerateUploadUrlResult = {
 export type GenerateUploadUrlResponse = {
   message: string;
   data: GenerateUploadUrlResult;
+};
+
+export type ViewDocumentUrlResult = {
+  documentId: string;
+  viewUrl: string;
+  key: string;
+};
+
+export type ViewDocumentUrlResponse = {
+  message: string;
+  data: ViewDocumentUrlResult;
 };
 
 export type SaveDocumentMetadataPayload = {

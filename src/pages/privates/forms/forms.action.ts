@@ -5,6 +5,8 @@ import type {
   GenerateUploadUrlResponse,
   GenerateUploadUrlResult,
   SaveDocumentMetadataPayload,
+  ViewDocumentUrlResponse,
+  ViewDocumentUrlResult,
 } from "@/types/document";
 
 const DEFAULT_UPLOAD_TIMEOUT_MS = 30000;
@@ -19,7 +21,7 @@ async function fetchJsonErrorMessage(response: Response, fallback: string) {
 }
 
 export async function loadDocuments(): Promise<CustomDocument[]> {
-  const response = await fetch(baseURL.getBaseURL() + "/documents/", {
+  const response = await fetch(baseURL.getBaseURL() + "/documents", {
     method: "GET",
     headers: {
       "Authorization": `Bearer ${auth.getToken()}`,
@@ -32,14 +34,27 @@ export async function loadDocuments(): Promise<CustomDocument[]> {
   }
 
   const data = await response.json();
-  return data as CustomDocument[];
+
+  const normalizeDocument = (document: CustomDocument): CustomDocument => ({
+    ...document,
+  });
+
+  if (Array.isArray(data)) {
+    return data.map(normalizeDocument) as CustomDocument[];
+  }
+
+  if (Array.isArray(data?.data)) {
+    return data.data.map(normalizeDocument) as CustomDocument[];
+  }
+
+  return [];
 }
 
 export async function generateUploadUrlAction(
   name: string,
   contentType: string,
 ): Promise<GenerateUploadUrlResult> {
-  const response = await fetch(`${baseURL.getBaseURL()}/document/generateUploadUrl`, {
+  const response = await fetch(`${baseURL.getBaseURL()}/document/upload-url`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -94,7 +109,7 @@ export async function uploadFileToSignedUrlAction(
 }
 
 export async function saveDocumentMetadataAction(payload: SaveDocumentMetadataPayload): Promise<void> {
-  const response = await fetch(`${baseURL.getBaseURL()}/document/saveMetadata`, {
+  const response = await fetch(`${baseURL.getBaseURL()}/document/metadata`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -125,4 +140,32 @@ export async function uploadDocumentAction(params: {
     size: file.size,
     category: category?.trim() || undefined,
   });
+}
+
+export async function viewDocumentAction(documentId: string): Promise<ViewDocumentUrlResult> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${baseURL.getBaseURL()}/document/view-url`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${auth.getToken()}`,
+      },
+      body: JSON.stringify({ documentId }),
+    });
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Falha de rede/CORS ao gerar URL de visualização: ${error.message}`
+        : "Falha de rede/CORS ao gerar URL de visualização",
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(await fetchJsonErrorMessage(response, "Falha ao gerar URL de visualização"));
+  }
+
+  const data = (await response.json()) as ViewDocumentUrlResponse;
+  return data.data;
 }

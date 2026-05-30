@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
 import type { CustomDocument } from "@/types/document";
-import { loadDocuments, uploadDocumentAction } from "./forms.action";
+import { loadDocuments, uploadDocumentAction, viewDocumentAction } from "./forms.action";
 import { customStyle } from "@/styles/custom-style";
 import { colors } from "@/styles/colors";
 
@@ -12,8 +12,10 @@ export function FormsPage() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [category, setCategory] = useState("");
     const [uploading, setUploading] = useState(false);
+    const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const [lastViewUrl, setLastViewUrl] = useState<string | null>(null);
     
     async function handleFetchDocuments() {
         setLoading(true);
@@ -34,12 +36,13 @@ export function FormsPage() {
 
     const documentosFiltrados = useMemo(() => {
         const termo = busca.trim().toLowerCase();
+        const listaDocumentos = Array.isArray(documentos) ? documentos : [];
 
         if (!termo) {
-            return documentos;
+            return listaDocumentos;
         }
 
-        return documentos.filter((doc) => {
+        return listaDocumentos.filter((doc) => {
             return doc.nome.toLowerCase().includes(termo) || doc.arquivo.toLowerCase().includes(termo);
         });
     }, [busca, documentos]);
@@ -76,6 +79,46 @@ export function FormsPage() {
         setSelectedFile(file);
         setError(null);
         setSuccess(null);
+    }
+
+    async function handleViewDocument(documentId: string) {
+        console.log("Gerando URL de visualização para documento ID:", documentId);
+        // tenta abrir a aba imediatamente (sincrono) — pode ser bloqueado
+        const previewTab = window.open("about:blank", "_blank");
+        const popupBlocked = !previewTab;
+
+        setViewingDocumentId(documentId);
+        setError(null);
+
+        try {
+            // chamada de diagnóstico (ajusta lastPayload no UI se desejar)
+            const { viewUrl } = await viewDocumentAction(documentId);
+
+            if (popupBlocked) {
+                // popup foi bloqueado — informar usuário e mostrar link para copiar
+                setLastViewUrl(viewUrl ?? null);
+                setError("O navegador bloqueou a nova aba. Copie o link abaixo para abrir.");
+            } else if (previewTab) {
+                try {
+                    // escreve um placeholder enquanto a URL carrega
+                    previewTab.document.title = "Abrindo documento...";
+                    previewTab.location.href = viewUrl;
+                    previewTab.opener = null;
+                } catch (navErr) {
+                    previewTab.close();
+                    setLastViewUrl(viewUrl ?? null);
+                    setError("Não foi possível redirecionar a aba automaticamente. Copie o link abaixo.");
+                }
+            }
+        } catch (err) {
+            if (previewTab) {
+                try { previewTab.close(); } catch (_) { /* ignore */ }
+            }
+
+            setError(err instanceof Error ? err.message : "Erro ao gerar URL de visualização");
+        } finally {
+            setViewingDocumentId(null);
+        }
     }
 
     return (
@@ -158,25 +201,42 @@ export function FormsPage() {
 
                     <tbody>
                         {documentosFiltrados.map((doc, index) => (
-                            <tr key={doc.arquivo} style={styles.tr}>
+                            <tr key={doc.id} style={styles.tr}>
                                 <td style={styles.indexCell}>
                                     <span style={styles.badge}>{index + 1}</span>
                                 </td>
 
                                 <td>
-                                    <a
-                                        href={`/docs/${doc.arquivo}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={styles.link}
-                                    >
-                                        {doc.nome.toUpperCase()}
-                                    </a>
+                                    <div style={styles.documentCell}>
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleViewDocument(doc.id)}
+                                            style={{
+                                                ...styles.linkButton,
+                                                opacity: viewingDocumentId === doc.id ? 0.75 : 1,
+                                            }}
+                                            disabled={viewingDocumentId === doc.id}
+                                        >
+                                            {viewingDocumentId === doc.id ? "Abrindo..." : doc.nome.toUpperCase()}
+                                        </button>
+
+                                        <span style={styles.documentKey}>{doc.arquivo}</span>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
+
+                {lastViewUrl && (
+                    <div style={{ padding: 12, borderTop: `1px solid ${colors.border}`, background: colors.inputBG, marginTop: 12 }}>
+                        <div style={{ marginBottom: 8, color: colors.text }}>URL de visualização (copie se necessário):</div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <input readOnly value={lastViewUrl} style={{ flex: 1, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
+                            <a href={lastViewUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.primaryDark, fontWeight: 700 }}>Abrir</a>
+                        </div>
+                    </div>
+                )}
 
                 {documentosFiltrados.length === 0 && (
                     <div style={styles.empty}>
@@ -318,6 +378,14 @@ const styles: Record<string, CSSProperties> = {
         padding: "14px 18px",
     },
 
+    documentCell: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        alignItems: "flex-start",
+        padding: "12px 18px",
+    },
+
     tr: {
         borderBottom: `1px solid ${colors.border}`,
         transition: "background 0.2s ease",
@@ -336,18 +404,23 @@ const styles: Record<string, CSSProperties> = {
         fontWeight: 600,
     },
 
-    link: {
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "12px 18px",
-        textDecoration: "none",
-        fontWeight: 600,
-        color: colors.text,
+    linkButton: {
+        padding: 0,
+        border: "none",
+        background: "transparent",
+        color: colors.primaryDark,
+        fontWeight: 700,
+        fontSize: 14,
+        textAlign: "left",
+        cursor: "pointer",
+        textDecoration: "underline",
+        textUnderlineOffset: 3,
     },
 
-    docIcon: {
-        fontSize: 18,
+    documentKey: {
+        fontSize: 12,
+        color: colors.textLight,
+        wordBreak: "break-word",
     },
 
     empty: {
