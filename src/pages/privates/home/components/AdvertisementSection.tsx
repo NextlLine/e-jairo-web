@@ -132,8 +132,6 @@ export function AdvertisementCarroussel({
                                     </button>
                                 )}
 
-
-
                                 <div>{ad.message}</div>
                             </div>
                         ))

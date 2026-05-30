@@ -3,7 +3,8 @@ import { router } from "@/router";
 import { signInAction } from "./signin.action";
 import { customStyle } from "@/styles/custom-style";
 import { colors } from "@/styles/colors";
-import Favicon from "@/utils/exportFavIcon";
+import Favicon from "@/utils/exportFavIcon"; 
+import { handleLoading } from "@/utils/handleLoading";
 
 export default function SignInPage() {
   const [email, setEmail] = React.useState("");
@@ -12,18 +13,7 @@ export default function SignInPage() {
   const [loading, setLoading] = React.useState(false);
 
   async function handleSignIn() {
-    try {
-      setError(null);
-      setLoading(true);
-
-      await signInAction(email, password);
-
-      router.navigate("/home");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro inesperado");
-    } finally {
-      setLoading(false);
-    }
+    handleLoading(setError, setLoading, () => signInAction(email, password));
   }
 
   function handleSignUp() {
@@ -42,7 +32,6 @@ export default function SignInPage() {
         <h1 style={customStyle.title}>
           Bem-vindo ao <span style={style.titleSpan}>E-JAIRO</span>
         </h1>
-
 
         <label style={customStyle.label}>
           Email
@@ -93,6 +82,7 @@ export default function SignInPage() {
     </div>
   );
 }
+
 const style: Record<string, CSSProperties> = {
   titleSpan: {
     color: colors.primary,

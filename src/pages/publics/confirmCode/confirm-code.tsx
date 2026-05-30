@@ -1,9 +1,9 @@
 import React from "react";
-import { router } from "@/router";
 import { confirmCodeAction } from "./confirm-code.action";
 import { customStyle } from "@/styles/custom-style";
 import { useLocation } from "react-router-dom";
 import Favicon from "@/utils/exportFavIcon";
+import { handleLoading } from "@/utils/handleLoading";
 
 export default function ConfirmCodePage() {
   const location = useLocation();
@@ -16,18 +16,7 @@ export default function ConfirmCodePage() {
   const [loading, setLoading] = React.useState(false);
 
   async function handleConfirm() {
-    try {
-      setError(null);
-      setLoading(true);
-
-      await confirmCodeAction(email, code);
-
-      router.navigate("/home");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro inesperado");
-    } finally {
-      setLoading(false);
-    }
+    handleLoading(setError, setLoading, () => confirmCodeAction(email, code));
   }
 
   return (

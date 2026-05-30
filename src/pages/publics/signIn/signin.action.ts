@@ -1,11 +1,12 @@
+import { router } from "@/router";
 import { auth } from "@/services/auth";
 import { z } from "zod";
+import { baseURL } from "@/types/baseURL";
 
 const signInSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
 });
-
 
 export const signInAction = async (email: string, password: string) => {
   const parsed = signInSchema.safeParse({ email, password });
@@ -14,16 +15,11 @@ export const signInAction = async (email: string, password: string) => {
     throw new Error(parsed.error.issues[0].message);
   }
 
-  const baseUrl = import.meta.env.VITE_BASE_URL;
-
-  if (!baseUrl) {
-    throw new Error("URL da API não configurada");
-  }
 
   let response: Response;
 
   try {
-    response = await fetch(`${baseUrl}/auth/signin`, {
+    response = await fetch(`${baseURL.getBaseURL()}/auth/signin`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -40,29 +36,25 @@ export const signInAction = async (email: string, password: string) => {
     try {
       const errorData = await response.json();
       message = errorData.message || message;
-    } catch {
+    } catch { }
+    if (message === "UserNotConfirmedException") {
+      router.navigate("/confirm-code", { state: { email } });
+      return;
     }
 
     throw new Error(message);
   }
 
-  const contentType = response.headers.get("content-type");
-  if (!contentType || !contentType.includes("application/json")) {
-    throw new Error("Resposta inválida do servidor");
-  }
+  const data = await response.json();
+  console.log("Resposta do servidor:", data);
 
-  let data: any;
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error("Erro ao processar resposta do servidor");
-  }
-
-  const accessToken = data.authenticationResult?.AccessToken;
+  const accessToken = data.accessToken;
 
   if (!accessToken) {
     throw new Error("Token não recebido do servidor");
   }
 
   auth.signIn(accessToken);
+
+  router.navigate("/home");
 };

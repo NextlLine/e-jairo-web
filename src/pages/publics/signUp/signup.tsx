@@ -3,30 +3,20 @@ import { router } from "@/router";
 import { signUpAction } from "./signup.action";
 import { customStyle } from "@/styles/custom-style";
 import Favicon from "@/utils/exportFavIcon";
+import { handleLoading } from "@/utils/handleLoading";
 
 export default function SignUpPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [name, setName] = React.useState("");
-  const [teamId, setTeamId] = React.useState("");
+  const [teamCode, setTeamCode] = React.useState("");
+  const [profession, setProfession] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
   async function handleSignUp() {
-    try {
-      setError(null);
-      setLoading(true);
-
-      await signUpAction(email, password, confirmPassword, name, teamId);
-
-      router.navigate("/confirm-code", { state: { email } });
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro inesperado");
-    } finally {
-      setLoading(false);
-    }
+    handleLoading(setError, setLoading, () => signUpAction(email, password, confirmPassword, name, teamCode, profession));
   }
 
   function handleSignIn() {
@@ -43,15 +33,29 @@ export default function SignUpPage() {
         <img src={Favicon} style={customStyle.logo} />
 
         <label style={customStyle.label}>
-          Team ID
+          Código do Time
           <input
             type="text"
-            value={teamId}
-            onChange={(e) => setTeamId(e.currentTarget.value)}
+            value={teamCode}
+            onChange={(e) => setTeamCode(e.currentTarget.value)}
             style={customStyle.input}
-            placeholder="Digite o ID do time"
+            placeholder="Digite o código do time"
             autoComplete="off"
           />
+        </label>
+
+        <label style={customStyle.label}>
+          Profissão
+          <select
+            value={profession}
+            onChange={(e) => setProfession(e.currentTarget.value)}
+            style={customStyle.input}
+          >
+            <option value="">Selecione sua profissão</option>
+            <option value="TEC_ENFERMAGEM">Técnico de Enfermagem</option>
+            <option value="ENFERMEIRO">Enfermeiro</option>
+            <option value="MEDICO">Médico</option>
+          </select>
         </label>
 
         <label style={customStyle.label}>
