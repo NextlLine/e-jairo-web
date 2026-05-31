@@ -17,10 +17,12 @@ export const signUpAction = async (
         throw new Error("As senhas não coincidem");
     }
 
-    if (!password.match(/^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/)) {
-        throw new Error(
-            "A senha deve ter no mínimo 8 caracteres, incluindo letras, números e simbolos",
-        );
+    if (password.length < 8) {
+        throw new Error("A senha deve ter no mínimo 8 caracteres");
+    }
+
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password)) {
+        throw new Error("A senha deve conter pelo menos um caractere especial");
     }
 
     const response = await fetch(`${baseURL.getBaseURL()}/auth/signup`, {
