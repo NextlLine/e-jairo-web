@@ -4,6 +4,22 @@ export type CustomDocument = {
   arquivo: string;
 };
 
+export type LoadDocumentsParams = {
+  limit?: number;
+  cursor?: string | null;
+  category?: string;
+};
+
+export type LoadDocumentsResult = {
+  documents: CustomDocument[];
+  nextCursor: string | null;
+};
+
+export type LoadDocumentsResponse = {
+  documents: CustomDocument[];
+  nextCursor: string | null;
+};
+
 export type GenerateUploadUrlResult = {
   documentId: string;
   uploadUrl: string;

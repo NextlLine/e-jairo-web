@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
 import type { CustomDocument } from "@/types/document";
-import { loadDocuments, uploadDocumentAction, viewDocumentAction } from "./forms.action";
+import { deleteDocumentAction, loadDocuments, uploadDocumentAction, viewDocumentAction } from "./forms.action";
+import { auth } from "@/services/auth";
 import { customStyle } from "@/styles/custom-style";
 import { colors } from "@/styles/colors";
 
@@ -11,23 +12,67 @@ export function FormsPage() {
     const [loading, setLoading] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [category, setCategory] = useState("");
+    const [categoryFilter, setCategoryFilter] = useState("");
     const [uploading, setUploading] = useState(false);
     const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
+    const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [lastViewUrl, setLastViewUrl] = useState<string | null>(null);
+    const [showUpload, setShowUpload] = useState(false);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [currentCursor, setCurrentCursor] = useState<string | null>(null);
+    const [cursorHistory, setCursorHistory] = useState<(string | null)[]>([]);
+    const pageLimit = 20;
+    const canManageDocuments = auth.getRole() === "ADMIN" || auth.getRole() === "MASTER";
+    const isBusy = loading || uploading;
+    const busyLabel = loading ? "Carregando documentos..." : uploading ? "Enviando documento..." : "Processando...";
     
-    async function handleFetchDocuments() {
+    async function handleFetchDocuments(cursor: string | null = currentCursor) {
         setLoading(true);
         setError(null);
 
         try {
-            setDocuments(await loadDocuments());
+            const result = await loadDocuments({
+                limit: pageLimit,
+                cursor,
+                category: categoryFilter.trim() || undefined,
+            });
+
+            setDocuments(result.documents);
+            setNextCursor(result.nextCursor);
+            setCurrentCursor(cursor);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erro ao carregar documentos");
         } finally {
             setLoading(false);
         }
+    }
+
+    async function handleApplyCategoryFilter() {
+        setCursorHistory([]);
+        setCurrentCursor(null);
+        await handleFetchDocuments(null);
+    }
+
+    async function handleNextPage() {
+        if (!nextCursor) {
+            return;
+        }
+
+        setCursorHistory((prev) => [...prev, currentCursor]);
+        await handleFetchDocuments(nextCursor);
+    }
+
+    async function handlePreviousPage() {
+        if (cursorHistory.length === 0) {
+            return;
+        }
+
+        const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
+
+        setCursorHistory((prev) => prev.slice(0, -1));
+        await handleFetchDocuments(previousCursor);
     }
 
     useEffect(() => {
@@ -48,6 +93,11 @@ export function FormsPage() {
     }, [busca, documentos]);
 
     async function handleUpload() {
+        if (!canManageDocuments) {
+            setError("Você não tem permissão para enviar documentos");
+            return;
+        }
+
         if (!selectedFile) {
             setError("Selecione um arquivo para enviar");
             return;
@@ -121,76 +171,198 @@ export function FormsPage() {
         }
     }
 
+    async function handleDeleteDocument(documentId: string) {
+        if (!canManageDocuments) {
+            setError("Você não tem permissão para excluir documentos");
+            return;
+        }
+
+        const confirmed = window.confirm("Tem certeza que deseja excluir este documento?");
+
+        if (!confirmed) {
+            return;
+        }
+
+        setDeletingDocumentId(documentId);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            await deleteDocumentAction(documentId);
+            setSuccess("Documento excluído com sucesso");
+            await handleFetchDocuments();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Erro ao excluir documento");
+        } finally {
+            setDeletingDocumentId(null);
+        }
+    }
+
     return (
         <div style={styles.page}>
-
-            <div style={styles.panel}>
-                <div style={styles.panelHeader}>
-                    <div>
-                        <h2 style={styles.title}>Enviar documento</h2>
-                        <p style={styles.subtitle}>Gere a URL pré-assinada, envie direto ao S3 e salve a metadata no backend.</p>
+            <style>{`@keyframes forms-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+            {isBusy && (
+                <div style={styles.loaderOverlay}>
+                    <div style={styles.loaderCard}>
+                        <div style={styles.spinner} />
+                        <div style={styles.loaderTitle}>{busyLabel}</div>
+                        <div style={styles.loaderSubtitle}>Aguarde um momento enquanto a operação é concluída.</div>
                     </div>
+                </div>
+            )}
 
-                    <button
-                        type="button"
-                        onClick={() => void handleFetchDocuments()}
-                        style={{ ...styles.secondaryButton, opacity: loading ? 0.7 : 1 }}
-                        disabled={loading}
-                    >
-                        {loading ? "Atualizando..." : "Atualizar lista"}
-                    </button>
+            <div style={styles.toolbar}>
+                <div style={styles.searchBox}>
+                    <span style={styles.searchPrefix}>BUSCAR</span>
+                    <input
+                        type="text"
+                        placeholder="Nome ou chave do arquivo"
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        style={styles.searchInput}
+                    />
                 </div>
 
-                <div style={styles.formRow}>
-                    <label style={styles.field}>
-                        <span style={styles.label}>Arquivo</span>
-                        <input
-                            type="file"
-                            onChange={handleFileChange}
-                            style={styles.fileInput}
-                        />
-                    </label>
-
-                    <label style={styles.field}>
-                        <span style={styles.label}>Categoria</span>
-                        <input
-                            type="text"
-                            placeholder="Opcional"
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                            style={customStyle.input}
-                        />
-                    </label>
-
-                    <button
-                        type="button"
-                        onClick={() => void handleUpload()}
-                        style={{ ...styles.primaryButton, opacity: uploading ? 0.7 : 1 }}
-                        disabled={uploading}
-                    >
-                        {uploading ? "Enviando..." : "Enviar documento"}
-                    </button>
-                </div>
-
-                {selectedFile && (
-                    <div style={styles.fileSummary}>
-                        Selecionado: {selectedFile.name} ({Math.ceil(selectedFile.size / 1024)} KB)
-                    </div>
-                )}
-
-                {error && <div style={customStyle.error}>{error}</div>}
-                {success && <div style={styles.success}>{success}</div>}
+                <button
+                    type="button"
+                    onClick={() => void handleFetchDocuments()}
+                    style={{ ...styles.secondaryButton, minWidth: 140, opacity: loading ? 0.7 : 1 }}
+                    disabled={loading}
+                >
+                    {loading ? "Buscando..." : "Atualizar"}
+                </button>
             </div>
 
-            <input
-                type="text"
-                placeholder="Digite o nome do arquivo"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                style={customStyle.input}
-            />
+            <div style={styles.filterRow}>
+                <div style={styles.filterBox}>
+                    <span style={styles.searchPrefix}>CATEGORIA</span>
+                    <input
+                        type="text"
+                        placeholder="Filtrar pela categoria"
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        style={styles.filterInput}
+                    />
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => void handleApplyCategoryFilter()}
+                    style={styles.secondaryButton}
+                    disabled={loading}
+                >
+                    Aplicar filtro
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => {
+                        setCategoryFilter("");
+                        setCursorHistory([]);
+                        setCurrentCursor(null);
+                        void handleFetchDocuments(null);
+                    }}
+                    style={styles.secondaryButton}
+                    disabled={loading}
+                >
+                    Limpar filtro
+                </button>
+            </div>
+
+            {canManageDocuments && (
+                <>
+                    <div style={styles.uploadStrip}>
+                        <div>
+                            <div style={styles.uploadStripTitle}>Envio de documentos</div>
+                            <div style={styles.uploadStripText}>Se precisar, abra o envio rápido sem tirar o foco da busca.</div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setShowUpload((prev) => !prev)}
+                            style={styles.uploadToggleButton}
+                        >
+                            {showUpload ? "Fechar envio" : "Novo documento"}
+                        </button>
+                    </div>
+
+                    {showUpload && (
+                        <div style={styles.compactUploadPanel}>
+                            <div style={styles.formRow}>
+                                <label style={styles.field}>
+                                    <span style={styles.label}>Arquivo</span>
+                                    <input
+                                        type="file"
+                                        onChange={handleFileChange}
+                                        style={styles.fileInput}
+                                    />
+                                </label>
+
+                                <label style={styles.field}>
+                                    <span style={styles.label}>Categoria</span>
+                                    <input
+                                        type="text"
+                                        placeholder="Opcional"
+                                        value={category}
+                                        onChange={(e) => setCategory(e.target.value)}
+                                        style={customStyle.input}
+                                    />
+                                </label>
+
+                                <button
+                                    type="button"
+                                    onClick={() => void handleUpload()}
+                                    style={{ ...styles.primaryButton, opacity: uploading ? 0.7 : 1 }}
+                                    disabled={uploading}
+                                >
+                                    {uploading ? "Enviando..." : "Enviar"}
+                                </button>
+                            </div>
+
+                            {selectedFile && (
+                                <div style={styles.fileSummary}>
+                                    Selecionado: {selectedFile.name} ({Math.ceil(selectedFile.size / 1024)} KB)
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+
+            {error && <div style={customStyle.error}>{error}</div>}
+            {success && <div style={styles.success}>{success}</div>}
 
             <div style={styles.card}>
+                <div style={styles.paginationBar}>
+                    <div style={styles.paginationInfoWrap}>
+                        <div style={styles.paginationInfoTitle}>Resultados da página</div>
+                        <div style={styles.paginationInfoText}>
+                            Mostrando {documentos.length} documento{documentos.length === 1 ? "" : "s"} nesta página
+                        </div>
+                        <div style={styles.paginationBadge}>{nextCursor ? "Há mais resultados" : "Fim da lista"}</div>
+                    </div>
+
+                    <div style={styles.paginationActions}>
+                        <button
+                            type="button"
+                            onClick={() => void handlePreviousPage()}
+                            style={{ ...styles.paginationButton, opacity: cursorHistory.length === 0 ? 0.55 : 1 }}
+                            disabled={loading || cursorHistory.length === 0}
+                        >
+                            Anterior
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => void handleNextPage()}
+                            style={{ ...styles.paginationButton, opacity: !nextCursor ? 0.55 : 1 }}
+                            disabled={loading || !nextCursor}
+                        >
+                            Próxima
+                        </button>
+                    </div>
+                </div>
+
                 <table style={styles.table}>
                     <thead>
                         <tr style={styles.theadRow}>
@@ -221,6 +393,19 @@ export function FormsPage() {
                                         </button>
 
                                         <span style={styles.documentKey}>{doc.arquivo}</span>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleDeleteDocument(doc.id)}
+                                            hidden={!canManageDocuments}
+                                            style={{
+                                                ...styles.deleteButton,
+                                                opacity: deletingDocumentId === doc.id ? 0.75 : 1,
+                                            }}
+                                            disabled={deletingDocumentId === doc.id}
+                                        >
+                                            {deletingDocumentId === doc.id ? "Excluindo..." : "Excluir"}
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -229,11 +414,11 @@ export function FormsPage() {
                 </table>
 
                 {lastViewUrl && (
-                    <div style={{ padding: 12, borderTop: `1px solid ${colors.border}`, background: colors.inputBG, marginTop: 12 }}>
-                        <div style={{ marginBottom: 8, color: colors.text }}>URL de visualização (copie se necessário):</div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                            <input readOnly value={lastViewUrl} style={{ flex: 1, padding: 8, borderRadius: 8, border: `1px solid ${colors.border}` }} />
-                            <a href={lastViewUrl} target="_blank" rel="noopener noreferrer" style={{ color: colors.primaryDark, fontWeight: 700 }}>Abrir</a>
+                    <div style={styles.viewLinkBox}>
+                        <div style={styles.viewLinkTitle}>URL de visualização</div>
+                        <div style={styles.viewLinkRow}>
+                            <input readOnly value={lastViewUrl} style={styles.viewLinkInput} />
+                            <a href={lastViewUrl} target="_blank" rel="noopener noreferrer" style={styles.viewLinkAnchor}>Abrir</a>
                         </div>
                     </div>
                 )}
@@ -253,15 +438,120 @@ const styles: Record<string, CSSProperties> = {
         padding: 30,
         maxWidth: 1000,
         margin: "0 auto",
+        minHeight: "100vh",
+        background: "linear-gradient(180deg, #F7F8FC 0%, #FFFFFF 100%)",
+        position: "relative",
+    },
+
+    hero: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        gap: 20,
+        marginBottom: 18,
+        padding: 22,
+        borderRadius: 18,
+        background: "linear-gradient(135deg, #0F172A 0%, #1D4ED8 100%)",
+        color: "white",
+        boxShadow: "0 18px 40px rgba(15, 23, 42, 0.18)",
+        flexWrap: "wrap",
+    },
+
+        filterRow: {
+            marginTop: 12,
+            marginBottom: 12,
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+        },
+
+        filterBox: {
+            flex: 1,
+            minWidth: 260,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "0 12px",
+            borderRadius: 12,
+            border: "1px solid rgba(148, 163, 184, 0.5)",
+            background: "#F8FAFC",
+            boxShadow: "0 6px 16px rgba(15, 23, 42, 0.05)",
+        },
+
+        filterInput: {
+            ...customStyle.input,
+            flex: 1,
+            minWidth: 180,
+            marginTop: 0,
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            boxShadow: "none",
+            paddingLeft: 0,
+            paddingRight: 0,
+            fontSize: 15,
+            fontWeight: 600,
+        },
+
+    heroEyebrow: {
+        fontSize: 12,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        opacity: 0.8,
+        fontWeight: 700,
+        marginBottom: 8,
+    },
+
+    heroTitle: {
+        margin: 0,
+        fontSize: 28,
+        lineHeight: 1.1,
+        fontWeight: 800,
+        maxWidth: 620,
+    },
+
+    heroText: {
+        margin: "10px 0 0",
+        maxWidth: 680,
+        color: "rgba(255,255,255,0.82)",
+        fontSize: 14,
+    },
+
+    heroPillRow: {
+        display: "grid",
+        gridTemplateColumns: "repeat(2, minmax(120px, 1fr))",
+        gap: 10,
+        minWidth: 260,
+    },
+
+    heroPill: {
+        padding: 14,
+        borderRadius: 14,
+        background: "rgba(255,255,255,0.12)",
+        border: "1px solid rgba(255,255,255,0.14)",
+        backdropFilter: "blur(10px)",
+    },
+
+    heroPillLabel: {
+        display: "block",
+        fontSize: 12,
+        opacity: 0.8,
+        marginBottom: 4,
+    },
+
+    heroPillValue: {
+        fontSize: 20,
+        fontWeight: 800,
     },
 
     panel: {
         marginBottom: 24,
         padding: 20,
         background: colors.cardBG,
-        borderRadius: 14,
+        borderRadius: 18,
         border: `1px solid ${colors.border}`,
-        boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+        boxShadow: "0 8px 26px rgba(15, 23, 42, 0.08)",
     },
 
     panelHeader: {
@@ -352,8 +642,8 @@ const styles: Record<string, CSSProperties> = {
     card: {
         marginTop: 25,
         background: colors.cardBG,
-        borderRadius: 14,
-        boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+        borderRadius: 18,
+        boxShadow: "0 8px 26px rgba(15, 23, 42, 0.08)",
         overflow: "hidden",
         border: `1px solid ${colors.border}`,
     },
@@ -361,6 +651,65 @@ const styles: Record<string, CSSProperties> = {
     table: {
         width: "100%",
         borderCollapse: "collapse",
+    },
+
+    paginationBar: {
+        padding: "12px 16px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
+        borderBottom: `1px solid ${colors.border}`,
+        background: "linear-gradient(180deg, #FBFDFF 0%, #F8FAFC 100%)",
+    },
+
+    paginationInfoWrap: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+    },
+
+    paginationInfoTitle: {
+        fontSize: 12,
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+        fontWeight: 800,
+        color: colors.text,
+    },
+
+    paginationInfoText: {
+        fontSize: 13,
+        color: colors.textLight,
+        fontWeight: 500,
+    },
+
+    paginationBadge: {
+        alignSelf: "flex-start",
+        padding: "4px 8px",
+        borderRadius: 999,
+        background: "#E8F1FF",
+        color: colors.primaryDark,
+        fontSize: 11,
+        fontWeight: 800,
+    },
+
+    paginationActions: {
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+    },
+
+    paginationButton: {
+        padding: "8px 12px",
+        borderRadius: 10,
+        border: `1px solid ${colors.border}`,
+        background: colors.cardBG,
+        color: colors.text,
+        fontWeight: 700,
+        cursor: "pointer",
+        minWidth: 96,
+        boxShadow: "0 4px 10px rgba(15, 23, 42, 0.04)",
     },
 
     theadRow: {
@@ -389,6 +738,95 @@ const styles: Record<string, CSSProperties> = {
     tr: {
         borderBottom: `1px solid ${colors.border}`,
         transition: "background 0.2s ease",
+    },
+
+    toolbar: {
+        marginTop: 20,
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+        flexWrap: "wrap",
+    },
+
+    uploadStrip: {
+        marginTop: 12,
+        marginBottom: 12,
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: `1px dashed ${colors.border}`,
+        background: colors.cardBG,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        flexWrap: "wrap",
+    },
+
+    uploadStripTitle: {
+        fontSize: 14,
+        fontWeight: 700,
+        color: colors.text,
+    },
+
+    uploadStripText: {
+        marginTop: 2,
+        fontSize: 12,
+        color: colors.textLight,
+    },
+
+    uploadToggleButton: {
+        padding: "8px 12px",
+        borderRadius: 10,
+        border: `1px solid ${colors.border}`,
+        background: "#F8FAFF",
+        color: colors.primaryDark,
+        fontWeight: 700,
+        cursor: "pointer",
+    },
+
+    compactUploadPanel: {
+        marginBottom: 12,
+        padding: 14,
+        borderRadius: 12,
+        border: `1px solid ${colors.border}`,
+        background: colors.cardBG,
+        boxShadow: "0 6px 18px rgba(15, 23, 42, 0.06)",
+    },
+
+    searchBox: {
+        flex: 1,
+        minWidth: 260,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "0 12px",
+        borderRadius: 12,
+        border: "2px solid rgba(29, 78, 216, 0.35)",
+        background: "#FFFFFF",
+        boxShadow: "0 10px 24px rgba(29, 78, 216, 0.12)",
+    },
+
+    searchPrefix: {
+        fontSize: 11,
+        fontWeight: 800,
+        letterSpacing: "0.08em",
+        color: colors.primaryDark,
+        whiteSpace: "nowrap",
+    },
+
+    searchInput: {
+        ...customStyle.input,
+        flex: 1,
+        minWidth: 180,
+        marginTop: 0,
+        border: "none",
+        outline: "none",
+        background: "transparent",
+        boxShadow: "none",
+        paddingLeft: 0,
+        paddingRight: 0,
+        fontSize: 15,
+        fontWeight: 600,
     },
 
     indexCell: {
@@ -423,10 +861,99 @@ const styles: Record<string, CSSProperties> = {
         wordBreak: "break-word",
     },
 
+    deleteButton: {
+        marginTop: 6,
+        padding: "6px 10px",
+        borderRadius: 8,
+        border: `1px solid ${colors.border}`,
+        background: "#FFF1F0",
+        color: "#B42318",
+        fontWeight: 700,
+        fontSize: 12,
+        cursor: "pointer",
+    },
+
     empty: {
         padding: 30,
         textAlign: "center",
         color: colors.textLight,
         fontWeight: 500,
+    },
+
+    viewLinkBox: {
+        padding: 14,
+        borderTop: `1px solid ${colors.border}`,
+        background: colors.inputBG,
+    },
+
+    viewLinkTitle: {
+        marginBottom: 8,
+        color: colors.text,
+        fontWeight: 700,
+    },
+
+    viewLinkRow: {
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+    },
+
+    viewLinkInput: {
+        flex: 1,
+        padding: 8,
+        borderRadius: 8,
+        border: `1px solid ${colors.border}`,
+        background: colors.cardBG,
+    },
+
+    viewLinkAnchor: {
+        color: colors.primaryDark,
+        fontWeight: 700,
+    },
+
+    loaderOverlay: {
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15, 23, 42, 0.35)",
+        backdropFilter: "blur(6px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 30,
+    },
+
+    loaderCard: {
+        width: "min(420px, calc(100vw - 32px))",
+        padding: 24,
+        borderRadius: 20,
+        background: "rgba(255,255,255,0.96)",
+        border: `1px solid ${colors.border}`,
+        boxShadow: "0 20px 50px rgba(15, 23, 42, 0.2)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 12,
+        textAlign: "center",
+    },
+
+    spinner: {
+        width: 44,
+        height: 44,
+        borderRadius: "50%",
+        border: `4px solid ${colors.border}`,
+        borderTopColor: colors.primaryDark,
+        animation: "forms-spin 0.9s linear infinite",
+    },
+
+    loaderTitle: {
+        fontSize: 16,
+        fontWeight: 800,
+        color: colors.text,
+    },
+
+    loaderSubtitle: {
+        fontSize: 13,
+        color: colors.textLight,
+        lineHeight: 1.5,
     },
 };

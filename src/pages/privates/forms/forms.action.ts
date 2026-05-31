@@ -2,6 +2,9 @@ import { auth } from "@/services/auth";
 import { baseURL } from "@/types/baseURL";
 import type {
   CustomDocument,
+  LoadDocumentsParams,
+  LoadDocumentsResponse,
+  LoadDocumentsResult,
   GenerateUploadUrlResponse,
   GenerateUploadUrlResult,
   SaveDocumentMetadataPayload,
@@ -20,8 +23,23 @@ async function fetchJsonErrorMessage(response: Response, fallback: string) {
   }
 }
 
-export async function loadDocuments(): Promise<CustomDocument[]> {
-  const response = await fetch(baseURL.getBaseURL() + "/documents", {
+export async function loadDocuments(params: LoadDocumentsParams = {}): Promise<LoadDocumentsResult> {
+  const searchParams = new URLSearchParams();
+
+  if (typeof params.limit === "number") {
+    searchParams.set("limit", String(params.limit));
+  }
+
+  if (params.cursor) {
+    searchParams.set("cursor", params.cursor);
+  }
+
+  if (params.category) {
+    searchParams.set("category", params.category);
+  }
+
+  const queryString = searchParams.toString();
+  const response = await fetch(`${baseURL.getBaseURL()}/documents${queryString ? `?${queryString}` : ""}`, {
     method: "GET",
     headers: {
       "Authorization": `Bearer ${auth.getToken()}`,
@@ -30,24 +48,43 @@ export async function loadDocuments(): Promise<CustomDocument[]> {
 
   if (!response.ok) {
     console.error("Erro ao carregar documentos:", response.statusText);
-    return [];
+    return {
+      documents: [],
+      nextCursor: null,
+    };
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as LoadDocumentsResponse | CustomDocument[] | { data?: CustomDocument[] };
 
   const normalizeDocument = (document: CustomDocument): CustomDocument => ({
     ...document,
   });
 
   if (Array.isArray(data)) {
-    return data.map(normalizeDocument) as CustomDocument[];
+    return {
+      documents: data.map(normalizeDocument) as CustomDocument[],
+      nextCursor: null,
+    };
   }
 
-  if (Array.isArray(data?.data)) {
-    return data.data.map(normalizeDocument) as CustomDocument[];
+  if (Array.isArray((data as LoadDocumentsResponse).documents)) {
+    return {
+      documents: (data as LoadDocumentsResponse).documents.map(normalizeDocument) as CustomDocument[],
+      nextCursor: (data as LoadDocumentsResponse).nextCursor ?? null,
+    };
   }
 
-  return [];
+  if (Array.isArray((data as { data?: CustomDocument[] })?.data)) {
+    return {
+      documents: ((data as { data?: CustomDocument[] }).data ?? []).map(normalizeDocument) as CustomDocument[],
+      nextCursor: null,
+    };
+  }
+
+  return {
+    documents: [],
+    nextCursor: null,
+  };
 }
 
 export async function generateUploadUrlAction(
@@ -168,4 +205,18 @@ export async function viewDocumentAction(documentId: string): Promise<ViewDocume
 
   const data = (await response.json()) as ViewDocumentUrlResponse;
   return data.data;
+}
+
+export async function deleteDocumentAction(documentId: string): Promise<void> {
+  const response = await fetch(`${baseURL.getBaseURL()}/document/${documentId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${auth.getToken()}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await fetchJsonErrorMessage(response, "Falha ao excluir documento"));
+  }
 }
