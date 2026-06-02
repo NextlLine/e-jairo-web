@@ -40,7 +40,7 @@ export default function HomePage() {
         onReload={handleLoadAdvertisements}
       />
 
-      <section style={styles.section}>
+      {/* <section style={styles.section}>
         <h2 style={styles.sectionTitle}><FaSearch /> Pesquisa Rápida</h2>
         <div style={styles.searchBox}>
           <input placeholder="Nome, SUS, CPF..." style={styles.input} />
@@ -51,7 +51,7 @@ export default function HomePage() {
             onFocus={(e) => e.currentTarget.style.outline = "none"}
           >Pesquisar</button>
         </div>
-      </section>
+      </section> */}
 
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}><FaChartPie /> Grupos / Estatísticas</h2>

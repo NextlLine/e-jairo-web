@@ -9,15 +9,29 @@ export function IconCard({
   icon,
   label,
   onClick,
+  disabled,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick?: () => void;
+  disabled?: boolean;
 }) {
+  const isDisabled = disabled ?? !onClick;
+
   return (
-    <div style={styles.iconCard} onClick={onClick}>
+    <div
+      style={{
+        ...styles.iconCard,
+        ...(isDisabled ? styles.iconCardDisabled : null),
+      }}
+      onClick={isDisabled ? undefined : onClick}
+      aria-disabled={isDisabled}
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+    >
       <div style={styles.icon}>{icon}</div>
       <span style={styles.iconLabel}>{label}</span>
+      {isDisabled && <span style={styles.disabledHint}>Em breve</span>}
     </div>
   );
 }
@@ -45,6 +59,14 @@ const styles: Record<string, React.CSSProperties> = {
     height: 120,
     boxShadow: "0 6px 14px rgba(37, 99, 235, 0.25)",
     cursor: "pointer",
+    transition: "opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease",
+  },
+  iconCardDisabled: {
+    opacity: 0.45,
+    filter: "saturate(0.55)",
+    cursor: "not-allowed",
+    boxShadow: "none",
+    transform: "none",
   },
   icon: {
     fontSize: 30,
@@ -53,5 +75,13 @@ const styles: Record<string, React.CSSProperties> = {
   iconLabel: {
     fontWeight: 600,
     textAlign: "center",
+  },
+  disabledHint: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    opacity: 0.9,
   },
 };

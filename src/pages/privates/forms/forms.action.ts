@@ -34,8 +34,20 @@ export async function loadDocuments(params: LoadDocumentsParams = {}): Promise<L
     searchParams.set("cursor", params.cursor);
   }
 
+  if (params.name) {
+    searchParams.set("name", params.name);
+  }
+
   if (params.category) {
     searchParams.set("category", params.category);
+  }
+
+  if (params.q) {
+    searchParams.set("q", params.q);
+  }
+
+  if (params.qType) {
+    searchParams.set("qType", params.qType);
   }
 
   const queryString = searchParams.toString();
@@ -58,6 +70,8 @@ export async function loadDocuments(params: LoadDocumentsParams = {}): Promise<L
 
   const normalizeDocument = (document: CustomDocument): CustomDocument => ({
     ...document,
+    nome: document.nome || document.name || "",
+    arquivo: document.arquivo || document.key || "",
   });
 
   if (Array.isArray(data)) {
@@ -170,7 +184,7 @@ export async function uploadDocumentAction(params: {
   await uploadFileToSignedUrlAction(uploadInfo.uploadUrl, file, file.type);
 
   await saveDocumentMetadataAction({
-    documentId: uploadInfo.documentId,
+    id: uploadInfo.id,
     name: file.name,
     key: uploadInfo.key,
     contentType: file.type,
@@ -179,7 +193,7 @@ export async function uploadDocumentAction(params: {
   });
 }
 
-export async function viewDocumentAction(documentId: string): Promise<ViewDocumentUrlResult> {
+export async function viewDocumentAction(id: string): Promise<ViewDocumentUrlResult> {
   let response: Response;
 
   try {
@@ -189,7 +203,7 @@ export async function viewDocumentAction(documentId: string): Promise<ViewDocume
         "Content-Type": "application/json",
         "Authorization": `Bearer ${auth.getToken()}`,
       },
-      body: JSON.stringify({ documentId }),
+      body: JSON.stringify({ id }),
     });
   } catch (error) {
     throw new Error(
@@ -207,8 +221,8 @@ export async function viewDocumentAction(documentId: string): Promise<ViewDocume
   return data.data;
 }
 
-export async function deleteDocumentAction(documentId: string): Promise<void> {
-  const response = await fetch(`${baseURL.getBaseURL()}/document/${documentId}`, {
+export async function deleteDocumentAction(id: string): Promise<void> {
+  const response = await fetch(`${baseURL.getBaseURL()}/document/${id}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",

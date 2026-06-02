@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
 import type { CustomDocument } from "@/types/document";
 import { deleteDocumentAction, loadDocuments, uploadDocumentAction, viewDocumentAction } from "./forms.action";
@@ -7,15 +7,15 @@ import { customStyle } from "@/styles/custom-style";
 import { colors } from "@/styles/colors";
 
 export function FormsPage() {
-    const [busca, setBusca] = useState("");
     const [documentos, setDocuments] = useState<CustomDocument[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [category, setCategory] = useState("");
+    const [nameFilter, setNameFilter] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("");
     const [uploading, setUploading] = useState(false);
-    const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null);
-    const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+    const [viewingid, setViewingid] = useState<string | null>(null);
+    const [deletingid, setDeletingid] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [lastViewUrl, setLastViewUrl] = useState<string | null>(null);
@@ -23,20 +23,24 @@ export function FormsPage() {
     const [nextCursor, setNextCursor] = useState<string | null>(null);
     const [currentCursor, setCurrentCursor] = useState<string | null>(null);
     const [cursorHistory, setCursorHistory] = useState<(string | null)[]>([]);
-    const pageLimit = 20;
+    const documentLimit = 20;
     const canManageDocuments = auth.getRole() === "ADMIN" || auth.getRole() === "MASTER";
     const isBusy = loading || uploading;
     const busyLabel = loading ? "Carregando documentos..." : uploading ? "Enviando documento..." : "Processando...";
     
-    async function handleFetchDocuments(cursor: string | null = currentCursor) {
+    async function handleFetchDocuments(cursor: string | null = null) {
         setLoading(true);
         setError(null);
 
+        const normalizedName = nameFilter.trim();
+        const normalizedCategory = categoryFilter.trim();
+
         try {
             const result = await loadDocuments({
-                limit: pageLimit,
-                cursor,
-                category: categoryFilter.trim() || undefined,
+                limit: documentLimit,
+                cursor: cursor ?? undefined,
+                name: normalizedName || undefined,
+                category: normalizedCategory || undefined,
             });
 
             setDocuments(result.documents);
@@ -49,10 +53,10 @@ export function FormsPage() {
         }
     }
 
-    async function handleApplyCategoryFilter() {
+    async function handleApplyFilters() {
         setCursorHistory([]);
         setCurrentCursor(null);
-        await handleFetchDocuments(null);
+        await handleFetchDocuments();
     }
 
     async function handleNextPage() {
@@ -79,19 +83,6 @@ export function FormsPage() {
         void handleFetchDocuments();
     }, []);
 
-    const documentosFiltrados = useMemo(() => {
-        const termo = busca.trim().toLowerCase();
-        const listaDocumentos = Array.isArray(documentos) ? documentos : [];
-
-        if (!termo) {
-            return listaDocumentos;
-        }
-
-        return listaDocumentos.filter((doc) => {
-            return doc.nome.toLowerCase().includes(termo) || doc.arquivo.toLowerCase().includes(termo);
-        });
-    }, [busca, documentos]);
-
     async function handleUpload() {
         if (!canManageDocuments) {
             setError("Você não tem permissão para enviar documentos");
@@ -116,7 +107,7 @@ export function FormsPage() {
             setSuccess("Documento enviado e metadata salva com sucesso");
             setSelectedFile(null);
             setCategory("");
-            await handleFetchDocuments();
+            await handleFetchDocuments(currentCursor);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erro ao enviar documento");
         } finally {
@@ -131,26 +122,21 @@ export function FormsPage() {
         setSuccess(null);
     }
 
-    async function handleViewDocument(documentId: string) {
-        console.log("Gerando URL de visualização para documento ID:", documentId);
-        // tenta abrir a aba imediatamente (sincrono) — pode ser bloqueado
+    async function handleViewDocument(id: string) {
         const previewTab = window.open("about:blank", "_blank");
         const popupBlocked = !previewTab;
 
-        setViewingDocumentId(documentId);
+        setViewingid(id);
         setError(null);
 
         try {
-            // chamada de diagnóstico (ajusta lastPayload no UI se desejar)
-            const { viewUrl } = await viewDocumentAction(documentId);
+            const { viewUrl } = await viewDocumentAction(id);
 
             if (popupBlocked) {
-                // popup foi bloqueado — informar usuário e mostrar link para copiar
                 setLastViewUrl(viewUrl ?? null);
                 setError("O navegador bloqueou a nova aba. Copie o link abaixo para abrir.");
             } else if (previewTab) {
                 try {
-                    // escreve um placeholder enquanto a URL carrega
                     previewTab.document.title = "Abrindo documento...";
                     previewTab.location.href = viewUrl;
                     previewTab.opener = null;
@@ -167,11 +153,11 @@ export function FormsPage() {
 
             setError(err instanceof Error ? err.message : "Erro ao gerar URL de visualização");
         } finally {
-            setViewingDocumentId(null);
+            setViewingid(null);
         }
     }
 
-    async function handleDeleteDocument(documentId: string) {
+    async function handleDeleteDocument(id: string) {
         if (!canManageDocuments) {
             setError("Você não tem permissão para excluir documentos");
             return;
@@ -183,18 +169,18 @@ export function FormsPage() {
             return;
         }
 
-        setDeletingDocumentId(documentId);
+        setDeletingid(id);
         setError(null);
         setSuccess(null);
 
         try {
-            await deleteDocumentAction(documentId);
+            await deleteDocumentAction(id);
             setSuccess("Documento excluído com sucesso");
-            await handleFetchDocuments();
+            await handleFetchDocuments(currentCursor);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erro ao excluir documento");
         } finally {
-            setDeletingDocumentId(null);
+            setDeletingid(null);
         }
     }
 
@@ -212,21 +198,15 @@ export function FormsPage() {
             )}
 
             <div style={styles.toolbar}>
-                <div style={styles.searchBox}>
-                    <span style={styles.searchPrefix}>BUSCAR</span>
-                    <input
-                        type="text"
-                        placeholder="Nome ou chave do arquivo"
-                        value={busca}
-                        onChange={(e) => setBusca(e.target.value)}
-                        style={styles.searchInput}
-                    />
-                </div>
-
                 <button
                     type="button"
-                    onClick={() => void handleFetchDocuments()}
-                    style={{ ...styles.secondaryButton, minWidth: 140, opacity: loading ? 0.7 : 1 }}
+                    onClick={() => void handleFetchDocuments(currentCursor)}
+                    style={{
+                        ...styles.secondaryButton,
+                        ...styles.ghostButton,
+                        minWidth: 140,
+                        opacity: loading ? 0.38 : 1,
+                    }}
                     disabled={loading}
                 >
                     {loading ? "Buscando..." : "Atualizar"}
@@ -235,10 +215,21 @@ export function FormsPage() {
 
             <div style={styles.filterRow}>
                 <div style={styles.filterBox}>
+                    <span style={styles.searchPrefix}>NOME</span>
+                    <input
+                        type="text"
+                        placeholder="Filtrar por nome"
+                        value={nameFilter}
+                        onChange={(e) => setNameFilter(e.target.value)}
+                        style={styles.filterInput}
+                    />
+                </div>
+
+                <div style={styles.filterBox}>
                     <span style={styles.searchPrefix}>CATEGORIA</span>
                     <input
                         type="text"
-                        placeholder="Filtrar pela categoria"
+                        placeholder="Filtrar por categoria"
                         value={categoryFilter}
                         onChange={(e) => setCategoryFilter(e.target.value)}
                         style={styles.filterInput}
@@ -247,8 +238,8 @@ export function FormsPage() {
 
                 <button
                     type="button"
-                    onClick={() => void handleApplyCategoryFilter()}
-                    style={styles.secondaryButton}
+                    onClick={() => void handleApplyFilters()}
+                    style={{ ...styles.secondaryButton, ...styles.primaryActionButton }}
                     disabled={loading}
                 >
                     Aplicar filtro
@@ -257,12 +248,13 @@ export function FormsPage() {
                 <button
                     type="button"
                     onClick={() => {
+                        setNameFilter("");
                         setCategoryFilter("");
                         setCursorHistory([]);
                         setCurrentCursor(null);
-                        void handleFetchDocuments(null);
+                        void handleFetchDocuments();
                     }}
-                    style={styles.secondaryButton}
+                    style={{ ...styles.secondaryButton, ...styles.ghostButton }}
                     disabled={loading}
                 >
                     Limpar filtro
@@ -274,13 +266,13 @@ export function FormsPage() {
                     <div style={styles.uploadStrip}>
                         <div>
                             <div style={styles.uploadStripTitle}>Envio de documentos</div>
-                            <div style={styles.uploadStripText}>Se precisar, abra o envio rápido sem tirar o foco da busca.</div>
+                            <div style={styles.uploadStripText}>Se precisar, abra o envio rápido sem perder o contexto dos filtros.</div>
                         </div>
 
                         <button
                             type="button"
                             onClick={() => setShowUpload((prev) => !prev)}
-                            style={styles.uploadToggleButton}
+                            style={{ ...styles.uploadToggleButton, ...styles.primaryActionButton }}
                         >
                             {showUpload ? "Fechar envio" : "Novo documento"}
                         </button>
@@ -312,7 +304,11 @@ export function FormsPage() {
                                 <button
                                     type="button"
                                     onClick={() => void handleUpload()}
-                                    style={{ ...styles.primaryButton, opacity: uploading ? 0.7 : 1 }}
+                                    style={{
+                                        ...styles.primaryButton,
+                                        ...styles.primaryActionButton,
+                                        opacity: uploading ? 0.38 : 1,
+                                    }}
                                     disabled={uploading}
                                 >
                                     {uploading ? "Enviando..." : "Enviar"}
@@ -335,18 +331,21 @@ export function FormsPage() {
             <div style={styles.card}>
                 <div style={styles.paginationBar}>
                     <div style={styles.paginationInfoWrap}>
-                        <div style={styles.paginationInfoTitle}>Resultados da página</div>
+                        <div style={styles.paginationInfoTitle}>Resultados da consulta</div>
                         <div style={styles.paginationInfoText}>
-                            Mostrando {documentos.length} documento{documentos.length === 1 ? "" : "s"} nesta página
+                            Mostrando {documentos.length} documento{documentos.length === 1 ? "" : "s"} nesta consulta
                         </div>
-                        <div style={styles.paginationBadge}>{nextCursor ? "Há mais resultados" : "Fim da lista"}</div>
+                        <div style={styles.paginationBadge}>{nextCursor ? "Mais resultados disponíveis" : "Fim da lista"}</div>
                     </div>
 
                     <div style={styles.paginationActions}>
                         <button
                             type="button"
                             onClick={() => void handlePreviousPage()}
-                            style={{ ...styles.paginationButton, opacity: cursorHistory.length === 0 ? 0.55 : 1 }}
+                            style={{
+                                ...styles.paginationButton,
+                                opacity: cursorHistory.length === 0 ? 0.35 : 1,
+                            }}
                             disabled={loading || cursorHistory.length === 0}
                         >
                             Anterior
@@ -355,7 +354,10 @@ export function FormsPage() {
                         <button
                             type="button"
                             onClick={() => void handleNextPage()}
-                            style={{ ...styles.paginationButton, opacity: !nextCursor ? 0.55 : 1 }}
+                            style={{
+                                ...styles.paginationButton,
+                                opacity: !nextCursor ? 0.35 : 1,
+                            }}
                             disabled={loading || !nextCursor}
                         >
                             Próxima
@@ -372,7 +374,7 @@ export function FormsPage() {
                     </thead>
 
                     <tbody>
-                        {documentosFiltrados.map((doc, index) => (
+                        {documentos.map((doc, index) => (
                             <tr key={doc.id} style={styles.tr}>
                                 <td style={styles.indexCell}>
                                     <span style={styles.badge}>{index + 1}</span>
@@ -380,32 +382,34 @@ export function FormsPage() {
 
                                 <td>
                                     <div style={styles.documentCell}>
-                                        <button
-                                            type="button"
-                                            onClick={() => void handleViewDocument(doc.id)}
-                                            style={{
-                                                ...styles.linkButton,
-                                                opacity: viewingDocumentId === doc.id ? 0.75 : 1,
-                                            }}
-                                            disabled={viewingDocumentId === doc.id}
-                                        >
-                                            {viewingDocumentId === doc.id ? "Abrindo..." : doc.nome.toUpperCase()}
-                                        </button>
+                                        <div style={styles.documentHeaderRow}>
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleViewDocument(doc.id)}
+                                                style={{
+                                                    ...styles.linkButton,
+                                                    opacity: viewingid === doc.id ? 0.38 : 1,
+                                                }}
+                                                disabled={viewingid === doc.id}
+                                            >
+                                                {viewingid === doc.id ? "Abrindo..." : (doc.nome || doc.name || "Documento").toUpperCase()}
+                                            </button>
 
-                                        <span style={styles.documentKey}>{doc.arquivo}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleDeleteDocument(doc.id)}
+                                                hidden={!canManageDocuments}
+                                                style={{
+                                                    ...styles.deleteButton,
+                                                    opacity: deletingid === doc.id ? 0.38 : 1,
+                                                }}
+                                                disabled={deletingid === doc.id}
+                                            >
+                                                {deletingid === doc.id ? "Excluindo..." : "Excluir"}
+                                            </button>
+                                        </div>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => void handleDeleteDocument(doc.id)}
-                                            hidden={!canManageDocuments}
-                                            style={{
-                                                ...styles.deleteButton,
-                                                opacity: deletingDocumentId === doc.id ? 0.75 : 1,
-                                            }}
-                                            disabled={deletingDocumentId === doc.id}
-                                        >
-                                            {deletingDocumentId === doc.id ? "Excluindo..." : "Excluir"}
-                                        </button>
+                                        <span style={styles.documentKey}>{doc.arquivo || doc.key}</span>
                                     </div>
                                 </td>
                             </tr>
@@ -423,7 +427,7 @@ export function FormsPage() {
                     </div>
                 )}
 
-                {documentosFiltrados.length === 0 && (
+                {documentos.length === 0 && (
                     <div style={styles.empty}>
                         Nenhum documento encontrado
                     </div>
@@ -621,6 +625,14 @@ const styles: Record<string, CSSProperties> = {
         cursor: "pointer",
     },
 
+    ghostButton: {
+        boxShadow: "none",
+    },
+
+    primaryActionButton: {
+        boxShadow: "0 10px 22px rgba(29, 78, 216, 0.16)",
+    },
+
     fileSummary: {
         marginTop: 14,
         fontSize: 14,
@@ -733,6 +745,14 @@ const styles: Record<string, CSSProperties> = {
         gap: 4,
         alignItems: "flex-start",
         padding: "12px 18px",
+    },
+
+    documentHeaderRow: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        width: "100%",
     },
 
     tr: {
