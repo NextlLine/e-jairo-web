@@ -3,6 +3,12 @@ name: Deploy to Amazon S3 and CloudFront
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: deploy-main-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   AWS_REGION: us-east-1

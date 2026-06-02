@@ -11,7 +11,6 @@ import {
   FaFileAlt,
   FaSyringe,
   FaChartPie,
-  FaSearch,
 } from "react-icons/fa";
 import { IconCard } from "@/components/card";
 import { AdvertisementCarroussel } from "@/pages/privates/home/components/AdvertisementSection";
@@ -39,19 +38,6 @@ export default function HomePage() {
         advertisements={advertisements}
         onReload={handleLoadAdvertisements}
       />
-
-      {/* <section style={styles.section}>
-        <h2 style={styles.sectionTitle}><FaSearch /> Pesquisa Rápida</h2>
-        <div style={styles.searchBox}>
-          <input placeholder="Nome, SUS, CPF..." style={styles.input} />
-          <input placeholder="Tipo de observação..." style={styles.input} />
-          <button
-            style={styles.searchBtn}
-            onMouseDown={(e) => e.preventDefault()}
-            onFocus={(e) => e.currentTarget.style.outline = "none"}
-          >Pesquisar</button>
-        </div>
-      </section> */}
 
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}><FaChartPie /> Grupos / Estatísticas</h2>
