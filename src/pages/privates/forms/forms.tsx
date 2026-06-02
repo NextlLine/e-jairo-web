@@ -408,8 +408,6 @@ export function FormsPage() {
                                                 {deletingid === doc.id ? "Excluindo..." : "Excluir"}
                                             </button>
                                         </div>
-
-                                        <span style={styles.documentKey}>{doc.arquivo || doc.key}</span>
                                     </div>
                                 </td>
                             </tr>
