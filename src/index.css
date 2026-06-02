@@ -44,10 +44,17 @@ button {
   font-family: inherit;
   background-color: #1a1a1a;
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: border-color 0.25s, opacity 0.25s, box-shadow 0.25s, transform 0.2s;
 }
-button:hover {
+button:hover:not(:disabled) {
   border-color: #646cff;
+}
+button:disabled {
+  opacity: 0.38 !important;
+  cursor: not-allowed !important;
+  pointer-events: none;
+  filter: saturate(0.7);
+  box-shadow: none;
 }
 button:focus,
 button:focus-visible {

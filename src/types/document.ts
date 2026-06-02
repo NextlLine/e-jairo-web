@@ -2,12 +2,21 @@ export type CustomDocument = {
   id: string;
   nome: string;
   arquivo: string;
+  name?: string;
+  key?: string;
+  contentType?: string;
+  size?: number;
+  category?: string;
+  createdAt?: string;
 };
 
 export type LoadDocumentsParams = {
   limit?: number;
   cursor?: string | null;
+  name?: string;
   category?: string;
+  q?: string;
+  qType?: "name" | "category";
 };
 
 export type LoadDocumentsResult = {
@@ -21,7 +30,7 @@ export type LoadDocumentsResponse = {
 };
 
 export type GenerateUploadUrlResult = {
-  documentId: string;
+  id: string;
   uploadUrl: string;
   key: string;
 };
@@ -32,7 +41,7 @@ export type GenerateUploadUrlResponse = {
 };
 
 export type ViewDocumentUrlResult = {
-  documentId: string;
+  id: string;
   viewUrl: string;
   key: string;
 };
@@ -43,7 +52,7 @@ export type ViewDocumentUrlResponse = {
 };
 
 export type SaveDocumentMetadataPayload = {
-  documentId: string;
+  id: string;
   name: string;
   key: string;
   contentType: string;

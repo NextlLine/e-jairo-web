@@ -4,15 +4,21 @@ export function IconButton({
     icon,
     label,
     onClick,
+    disabled,
 }: {
     icon: React.ReactNode;
     label: string;
     onClick?: () => void;
+    disabled?: boolean;
 }) {
+    const isDisabled = disabled ?? !onClick;
+
     return (
         <button
             style={styles.button}
             onClick={onClick}
+            disabled={isDisabled}
+            aria-disabled={isDisabled}
             onMouseDown={(e) => e.preventDefault()}
             onFocus={(e) => e.currentTarget.style.outline = "none"}
         >
@@ -31,7 +37,6 @@ const styles: Record<string, React.CSSProperties> = {
         borderRadius: 10,
         border: `1px solid ${colors.border}`,
         background: colors.cardBG,
-        cursor: "pointer",
         fontWeight: 600,
         color: colors.text,
         height: 40,
